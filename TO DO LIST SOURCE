@@ -2,133 +2,260 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <iomanip>
+#include <ctime>
+#include <algorithm>
 
 using namespace std;
 
-const string FILE_NAME = "tasks.txt";
+const string FILE_NAME = "tasks.csv";
+
+// Console colors (ANSI escape codes)
+const string GREEN = "\033[32m";
+const string RED = "\033[31m";
+const string CYAN = "\033[36m";
+const string RESET = "\033[0m";
 
 
-vector<string> loadTask()
 
-{
-   vector<string> tasks;
-   ifstream file (FILE_NAME);
-   string line;
+class Task {
+public:
+    int id;
+    string description;
+    bool completed;
+    string dateCreated;
 
-   while (getline(file, line))
-   {
-       if (!line.empty())
-       {
-           tasks.push_back(line);
-       }
-   }
-    file.close();
+    Task(int id, string desc, bool completed, string dateCreated)
+        : id(id), description(desc), completed(completed), dateCreated(dateCreated) {}
+
+    string toCSV() const {
+        return to_string(id) + "," + description + "," + (completed ? "1" : "0") + "," + dateCreated;
+    }
+};
+
+
+
+
+// Get current date/time
+string getCurrentDate() {
+    time_t now = time(nullptr);
+    tm* t = localtime(&now);
+
+    char buffer[80];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", t);
+
+    return string(buffer);
+}
+
+
+
+vector<Task> loadTasks() {
+    vector<Task> tasks;
+    ifstream file(FILE_NAME);
+
+    if (!file.is_open())
+        return tasks;
+
+    string line;
+    while (getline(file, line)) {
+        if (line.empty()) continue;
+
+        size_t pos1 = line.find(',');
+        size_t pos2 = line.find(',', pos1 + 1);
+        size_t pos3 = line.find(',', pos2 + 1);
+
+        int id = stoi(line.substr(0, pos1));
+        string description = line.substr(pos1 + 1, pos2 - pos1 - 1);
+        bool completed = stoi(line.substr(pos2 + 1, pos3 - pos2 - 1));
+        string date = line.substr(pos3 + 1);
+
+        tasks.emplace_back(id, description, completed, date);
+    }
+
     return tasks;
 }
-void saveTask(const vector<string>&tasks)// save task
-{
+
+void saveTasks(const vector<Task>& tasks) {
     ofstream file(FILE_NAME);
-    for (const string &task : tasks)
-    {
-     file<<task<<endl;
-    }
-    file.close();
+    for (const auto& task : tasks)
+        file << task.toCSV() << "\n";
 }
-void DisplayTasks(const vector<string>& tasks)
 
-{
-    if (tasks.empty())
-        {
-            cout<<"\n No task Found.\n";
+
+
+void displayTasks(const vector<Task>& tasks) {
+    if (tasks.empty()) {
+        cout << RED << "\nNo tasks found.\n" << RESET;
+        return;
+    }
+
+    cout << CYAN << "\n===== YOUR TO-DO LIST =====\n" << RESET;
+
+    for (const auto& task : tasks) {
+        cout << task.id << ". "
+             << (task.completed ? GREEN + "[DONE] " : RED + "[TODO] ")
+             << RESET << task.description
+             << " | Added: " << task.dateCreated << "\n";
+    }
+}
+
+
+
+void addTask(vector<Task>& tasks) {
+    cin.ignore();
+    cout << "\nEnter new task: ";
+    string desc;
+    getline(cin, desc);
+
+    if (desc.empty()) {
+        cout << RED << "Cannot add an empty task.\n" << RESET;
+        return;
+    }
+
+    int newId = tasks.empty() ? 1 : tasks.back().id + 1;
+    tasks.emplace_back(newId, desc, false, getCurrentDate());
+
+    saveTasks(tasks);
+    cout << GREEN << "Task added successfully!\n" << RESET;
+}
+
+void deleteTask(vector<Task>& tasks) {
+    displayTasks(tasks);
+
+    if (tasks.empty()) return;
+
+    cout << "\nEnter ID of task to delete: ";
+    int id;
+    cin >> id;
+
+    auto it = remove_if(tasks.begin(), tasks.end(),
+                        [&](Task& t) { return t.id == id; });
+
+    if (it == tasks.end()) {
+        cout << RED << "Invalid ID.\n" << RESET;
+        return;
+    }
+
+    tasks.erase(it, tasks.end());
+    saveTasks(tasks);
+
+    cout << GREEN << "Task deleted.\n" << RESET;
+}
+
+void markTaskComplete(vector<Task>& tasks) {
+    displayTasks(tasks);
+    if (tasks.empty()) return;
+
+    cout << "\nEnter task ID to toggle complete: ";
+    int id;
+    cin >> id;
+
+    for (auto& t : tasks) {
+        if (t.id == id) {
+            t.completed = !t.completed;
+            saveTasks(tasks);
+            cout << GREEN << "Task updated.\n" << RESET;
             return;
-
         }
-
-        cout<<"\n Your To Do List ;\n";
-        for (size_t i=0 ;i<tasks.size();i++)
-        {
-            cout<<i+1<<". "<<tasks[i]<<endl;
-
-        }
-}
-void addTask(vector<string>&tasks){
-    cout<<"\n Enter the new task:";
-    string task;
-    getline(cin,task);
-    if (task.empty()){
-        cout<<"Cannot add an empty task.\n";
-        return ;
     }
-    tasks.push_back (task);
-    saveTask(tasks);
-    cout<<"Task added successfully.\n";
-}
-void RemoveTasks(vector<string>& tasks){
-if  (tasks.empty()){
-cout<<"\n No tasks to delete.\n";
- return;
-}
- DisplayTasks(tasks);
- cout<<"\nEnter the number of the task to delete.\n";
-  int index;
-  cin>>index;
-  cin.ignore();
-  if (index<1 || index >static_cast<int>(tasks.size())){
-      return;
-
-  }
-
-  tasks.erase(tasks.begin()+index-1);
-  saveTask(tasks);
-  cout<<"Task deleted successfully.\n";
+    cout << RED << "Task ID not found.\n" << RESET;
 }
 
-void displayMenu(){
-cout<<"\n--- To-Do List Manager ---\n";
-cout<<"1.View Task\n";
-cout<<"2.Add Task\n";
-cout<<"3.Delete Task\n";
-cout<<"4.Exit\n";
-cout<< "Choose an option : ";
+void editTask(vector<Task>& tasks) {
+    displayTasks(tasks);
+    if (tasks.empty()) return;
 
-}
-int main()
-{
-vector<string> tasks=loadTask();
-while(true)
-{
-    displayMenu();
-    int Choice;
-    cin>>Choice;
+    cout << "\nEnter ID to edit: ";
+    int id;
+    cin >> id;
     cin.ignore();
 
-   switch(Choice)
+    for (auto& t : tasks) {
+        if (t.id == id) {
+            cout << "Enter new description: ";
+            string newDesc;
+            getline(cin, newDesc);
 
-   {
-   case 1:
-       DisplayTasks(tasks);
-       break;
+            if (!newDesc.empty()) {
+                t.description = newDesc;
+                saveTasks(tasks);
+                cout << GREEN << "Task edited.\n" << RESET;
+            }
+            return;
+        }
+    }
 
-   case 2:
-    addTask(tasks);
-    break;
-   case 3:
-    RemoveTasks(tasks);
-    break;
-   case 4:
-    cout<<"\nGoodbye !\n";
-    return 0;
-   default:
-
-    cout<<"Invalid choice. please try again.\n";
-
-   }
-
-
+    cout << RED << "Task not found.\n" << RESET;
 }
 
+void sortTasks(vector<Task>& tasks) {
+    cout << "\nSort by:\n1. Alphabetical\n2. Status\n3. Date Added\nChoose: ";
+    int choice;
+    cin >> choice;
+
+    switch (choice) {
+        case 1:
+            sort(tasks.begin(), tasks.end(),
+                 [](const Task& a, const Task& b) { return a.description < b.description; });
+            break;
+
+        case 2:
+            sort(tasks.begin(), tasks.end(),
+                 [](const Task& a, const Task& b) { return a.completed < b.completed; });
+            break;
+
+        case 3:
+            sort(tasks.begin(), tasks.end(),
+                 [](const Task& a, const Task& b) { return a.dateCreated < b.dateCreated; });
+            break;
+
+        default:
+            cout << RED << "Invalid choice.\n" << RESET;
+            return;
+    }
+
+    saveTasks(tasks);
+    cout << GREEN << "Tasks sorted.\n" << RESET;
 }
 
 
 
+void menu() {
+    cout << CYAN << "\n====== TO-DO LIST MANAGER ======\n" << RESET;
+    cout << "1. View Tasks\n";
+    cout << "2. Add Task\n";
+    cout << "3. Delete Task\n";
+    cout << "4. Edit Task\n";
+    cout << "5. Mark Task Done/Undone\n";
+    cout << "6. Sort Tasks\n";
+    cout << "7. Exit\n";
+    cout << "Choose an option: ";
+}
 
+
+
+int main() {
+    vector<Task> tasks = loadTasks();
+
+    while (true) {
+        menu();
+
+        int choice;
+        cin >> choice;
+
+        switch (choice) {
+            case 1: displayTasks(tasks); break;
+            case 2: addTask(tasks); break;
+            case 3: deleteTask(tasks); break;
+            case 4: editTask(tasks); break;
+            case 5: markTaskComplete(tasks); break;
+            case 6: sortTasks(tasks); break;
+            case 7:
+                cout << GREEN << "\nGoodbye!\n" << RESET;
+                return 0;
+
+            default:
+                cout << RED << "Invalid choice.\n" << RESET;
+        }
+    }
+}
